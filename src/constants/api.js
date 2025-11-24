@@ -72,4 +72,7 @@ export const API_ENDPOINTS = {
     VOUCHERS: "/inventory/vouchers",
     VOUCHER_DETAIL: (id) => `/inventory/vouchers/${id}`,
   },
+  DASHBOARD: {
+    SUMMARY: "/dashboard/summary",
+  },
 };

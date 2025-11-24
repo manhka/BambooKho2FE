@@ -17,6 +17,7 @@ import ExportGoods from "./pages/inventory/ExportGoods";
 import ImportGoods from "./pages/inventory/ImportGoods";
 import VoucherDetailView from "./pages/inventory/VoucherDetailView";
 import VoucherHistory from "./pages/inventory/VoucherHistory";
+import InventoryDashboard from "./pages/dashboard/InventoryDashboard";
 
 const AppRoutes = () => (
   <Routes>
@@ -135,6 +136,14 @@ const AppRoutes = () => (
         element={
           <ProtectedRoute requiredRole={["admin", "staff"]}>
             <VoucherHistory />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard"
+        element={
+          <ProtectedRoute requiredRole={["admin", "staff"]}>
+            <InventoryDashboard />
           </ProtectedRoute>
         }
       />

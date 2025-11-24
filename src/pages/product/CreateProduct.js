@@ -113,6 +113,7 @@ const CreateProduct = () => {
         // Chuyển đổi giá trị InputNumber thành số
         CostPrice: parseFloat(values.CostPrice),
         SalePrice: parseFloat(values.SalePrice),
+        StockQuantity: parseInt(values.StockQuantity || 0),
         MinStockLevel: parseInt(values.MinStockLevel || 0),
         MaxStockLevel: parseInt(values.MaxStockLevel || 0),
       };
@@ -167,6 +168,7 @@ const CreateProduct = () => {
             Status: true,
             CostPrice: 0,
             SalePrice: 0,
+            StockQuantity: 0,
             MinStockLevel: 0,
             MaxStockLevel: 0,
           }}
@@ -357,7 +359,28 @@ const CreateProduct = () => {
                   </Form.Item>
                 </Col>
               </Row>
-
+              <Row gutter={16} style={{ marginTop: 8 }}>
+                <Col span={12}>
+                  <Form.Item
+                    label="Số lượng Tồn kho ban đầu"
+                    name="StockQuantity"
+                    rules={[
+                      {
+                        required: true,
+                        message: "Nhập số lượng tồn kho ban đầu!",
+                      },
+                    ]}
+                  >
+                    <InputNumber
+                      style={{ width: "100%" }}
+                      min={0}
+                      placeholder="Nhập số lượng tồn kho hiện tại"
+                      // 💡 Ghi chú: Backend chấp nhận 0, nhưng bắt buộc nhập
+                    />
+                  </Form.Item>
+                </Col>
+                {/* Phần MinStockLevel và MaxStockLevel sẽ được đặt phía dưới */}
+              </Row>
               {/* Tồn kho (Min/Max) */}
               <Row gutter={16}>
                 <Col span={12}>

@@ -30,6 +30,13 @@ export default function Sidebar({ isOpen, onLogout }) {
   // =============================
   const menuItems = [
     {
+      id: "dashboard",
+      label: "Bảng điều khiển",
+      icon: Layers,
+      roles: ["admin"],
+      path: "/dashboard",
+    },
+    {
       id: "categories",
       label: "Quản lý danh mục",
       icon: Layers,

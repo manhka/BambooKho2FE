@@ -12,6 +12,7 @@ import {
   Row,
   Col,
   Space,
+  Tooltip,
 } from "antd";
 import {
   SaveOutlined,
@@ -26,7 +27,7 @@ import * as categoryService from "../../services/categoryService";
 import * as brandService from "../../services/brandService";
 import * as locationService from "../../services/locationService";
 
-import LocationFormModal from "../location/LocationFormModal";
+import LocationFormModal from "../location/LocationFormModal"; // Giả định Modal này tồn tại
 
 const { Option } = Select;
 const { TextArea } = Input;
@@ -50,7 +51,7 @@ const EditProduct = () => {
       const data = await locationService.fetchLocations(1, 1000, "", "active");
       setLocations(data.items || []);
     } catch (error) {
-      console.error(error);
+      console.error("Lỗi khi tải danh sách vị trí:", error);
       message.error("Không thể tải danh sách vị trí.");
       setLocations([]);
     }
@@ -59,14 +60,17 @@ const EditProduct = () => {
   const fetchInitialData = async () => {
     try {
       const [categoryRes, brandRes] = await Promise.all([
-        categoryService.fetchCategories(1, 1000, "", "active"),
-        brandService.fetchBrands(1, 1000, "", "active"),
+        categoryService
+          .fetchCategories(1, 1000, "", "active")
+          .catch(() => ({ items: [] })),
+        brandService
+          .fetchBrands(1, 1000, "", "active")
+          .catch(() => ({ items: [] })),
       ]);
       setCategories(categoryRes.items || []);
       setBrands(brandRes.items || []);
       await fetchAllLocations();
     } catch (error) {
-      console.error(error);
       message.error("Không thể tải dữ liệu danh mục, thương hiệu hoặc vị trí.");
     }
   };
@@ -74,19 +78,20 @@ const EditProduct = () => {
   const fetchProductData = async () => {
     try {
       const data = await productService.getProductDetail(barcode);
-      console.log("product:", data.product);
       const dynamicAttributes = data.product.Attributes
         ? Object.entries(data.product.Attributes).map(([key, value]) => ({
             key,
             value,
           }))
-        : [{ key: "", value: "" }];
+        : [];
 
       form.setFieldsValue({
         ...data.product,
         Status: data.product.Status === "active",
-        IsSerial: data.product.IsSerial,
-        dynamicAttributes,
+        dynamicAttributes:
+          dynamicAttributes.length > 0
+            ? dynamicAttributes
+            : [{ key: "", value: "" }],
       });
       setImageUrlPreview(data.product.ImageUrl || "");
     } catch (error) {
@@ -112,6 +117,7 @@ const EditProduct = () => {
     }
   };
 
+  // --- Handlers (onFinish) ---
   const onFinish = async (values) => {
     setSubmitting(true);
     try {
@@ -128,8 +134,12 @@ const EditProduct = () => {
           ? attributesObject
           : null,
         LocationID: values.LocationID,
+
+        // ⭐️ CẬP NHẬT TRƯỜNG TỒN KHO VÀ GIÁ
         CostPrice: parseFloat(values.CostPrice),
         SalePrice: parseFloat(values.SalePrice),
+        StockQuantity: parseInt(values.StockQuantity), // <-- Tồn kho vật lý (chú ý nghiệp vụ)
+        AverageCost: parseFloat(values.AverageCost), // Dữ liệu này có thể bị bỏ qua ở BE nếu không cần chỉnh
         MinStockLevel: parseInt(values.MinStockLevel || 0),
         MaxStockLevel: parseInt(values.MaxStockLevel || 0),
       };
@@ -141,8 +151,11 @@ const EditProduct = () => {
       message.success("Cập nhật sản phẩm thành công!");
       navigate("/products/list");
     } catch (error) {
-      console.error(error);
-      message.error(error.message || "Lỗi khi cập nhật sản phẩm.");
+      const errorMessage =
+        error.response?.data?.message ||
+        error.message ||
+        "Lỗi khi cập nhật sản phẩm.";
+      message.error(errorMessage);
     } finally {
       setSubmitting(false);
     }
@@ -165,7 +178,7 @@ const EditProduct = () => {
         </Button>
       </div>
 
-      <Card title="Cập nhật sản phẩm" variant="contained">
+      <Card title={`Cập nhật sản phẩm: ${barcode}`} variant="contained">
         <Form
           form={form}
           layout="vertical"
@@ -177,13 +190,17 @@ const EditProduct = () => {
           }}
         >
           <Row gutter={24}>
+            {/* ======================================================== */}
+            {/* Cột 1: Thông tin cơ bản và Phân loại */}
+            {/* ======================================================== */}
             <Col span={12}>
               <Form.Item
                 label="Barcode (Mã vạch)"
                 name="Barcode"
                 rules={[{ required: true, message: "Vui lòng nhập Barcode!" }]}
               >
-                <Input placeholder="Nhập hoặc quét mã vạch" disabled />
+                <Input placeholder="Mã vạch" disabled />{" "}
+                {/* Barcode KHÔNG được sửa sau khi tạo */}
               </Form.Item>
 
               <Form.Item
@@ -270,7 +287,11 @@ const EditProduct = () => {
               </Form.Item>
             </Col>
 
+            {/* ======================================================== */}
+            {/* Cột 2: Giá, Tồn kho, Vị trí và Attributes */}
+            {/* ======================================================== */}
             <Col span={12}>
+              {/* --- Giá cả --- */}
               <Row gutter={16}>
                 <Col span={12}>
                   <Form.Item
@@ -280,8 +301,8 @@ const EditProduct = () => {
                       { required: true, message: "Nhập giá nhập!" },
                       ({ getFieldValue }) => ({
                         validator(_, value) {
-                          if (!value || parseFloat(value) > 0)
-                            return Promise.resolve();
+                          const numValue = parseFloat(value);
+                          if (!value || numValue > 0) return Promise.resolve();
                           return Promise.reject(
                             new Error("Giá nhập phải lớn hơn 0!")
                           );
@@ -289,7 +310,14 @@ const EditProduct = () => {
                       }),
                     ]}
                   >
-                    <InputNumber style={{ width: "100%" }} min={0} />
+                    <InputNumber
+                      style={{ width: "100%" }}
+                      formatter={(value) =>
+                        `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ",")
+                      }
+                      parser={(value) => value.replace(/\$\s?|(,*)/g, "")}
+                      min={0}
+                    />
                   </Form.Item>
                 </Col>
                 <Col span={12}>
@@ -301,11 +329,13 @@ const EditProduct = () => {
                       ({ getFieldValue }) => ({
                         validator(_, value) {
                           const cost = parseFloat(getFieldValue("CostPrice"));
-                          if (!value || parseFloat(value) > 0) {
-                            if (parseFloat(value) >= cost)
-                              return Promise.resolve();
+                          const salePrice = parseFloat(value);
+                          if (!value || salePrice > 0) {
+                            if (salePrice >= cost) return Promise.resolve();
                             return Promise.reject(
-                              new Error("Giá bán phải >= Giá nhập!")
+                              new Error(
+                                "Giá bán phải lớn hơn hoặc bằng Giá nhập!"
+                              )
                             );
                           }
                           return Promise.reject(
@@ -315,11 +345,64 @@ const EditProduct = () => {
                       }),
                     ]}
                   >
-                    <InputNumber style={{ width: "100%" }} min={0} />
+                    <InputNumber
+                      style={{ width: "100%" }}
+                      formatter={(value) =>
+                        `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ",")
+                      }
+                      parser={(value) => value.replace(/\$\s?|(,*)/g, "")}
+                      min={0}
+                    />
                   </Form.Item>
                 </Col>
               </Row>
 
+              {/* --- Tồn kho Vật lý & Giá vốn TB --- */}
+              <Row gutter={16} style={{ marginTop: 10 }}>
+                <Col span={12}>
+                  <Tooltip
+                    title={
+                      "Chỉ điều chỉnh trực tiếp số lượng tồn kho này trong trường hợp khắc phục lỗi kiểm kê."
+                    }
+                  >
+                    <Form.Item
+                      label={
+                        <Space>
+                          Tồn kho Vật lý
+                          <MinusCircleOutlined style={{ color: "red" }} />
+                        </Space>
+                      }
+                      name="StockQuantity"
+                      rules={[
+                        { required: true, message: "Nhập số lượng tồn kho!" },
+                        {
+                          type: "number",
+                          min: 0,
+                          message: "Số lượng không được âm.",
+                        },
+                      ]}
+                    >
+                      <InputNumber style={{ width: "100%" }} min={0} />
+                    </Form.Item>
+                  </Tooltip>
+                </Col>
+
+                <Col span={12}>
+                  <Form.Item label="Giá vốn trung bình" name="AverageCost">
+                    {/* Giá vốn trung bình được tính toán tự động, Admin không được sửa trực tiếp */}
+                    <InputNumber
+                      style={{ width: "100%" }}
+                      disabled
+                      placeholder="Được tính toán tự động"
+                      formatter={(value) =>
+                        `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ",")
+                      }
+                    />
+                  </Form.Item>
+                </Col>
+              </Row>
+
+              {/* --- Tồn kho Định mức (Min/Max) --- */}
               <Row gutter={16}>
                 <Col span={12}>
                   <Form.Item
@@ -336,6 +419,7 @@ const EditProduct = () => {
                 </Col>
               </Row>
 
+              {/* VỊ TRÍ LƯU TRỮ */}
               <Row>
                 <Col span={24}>
                   <Form.Item
@@ -351,7 +435,7 @@ const EditProduct = () => {
                       allowClear
                       dropdownRender={(menu) => (
                         <>
-                          {menu}
+                          <Space style={{ padding: "4px 8px" }}>{menu}</Space>
                           <Button
                             type="dashed"
                             icon={<PlusOutlined />}
@@ -403,10 +487,11 @@ const EditProduct = () => {
                 </Form.Item>
               </Space>
 
+              {/* --- Thuộc tính động (Dynamic Attributes) --- */}
               <Card
                 title="Thuộc tính sản phẩm (Tùy chọn)"
                 size="small"
-                variant="contained"
+                style={{ marginTop: 20 }}
               >
                 <Form.List
                   name="dynamicAttributes"
@@ -469,13 +554,14 @@ const EditProduct = () => {
             </Col>
           </Row>
 
+          {/* Submit Button */}
           <Form.Item>
             <Button
               type="primary"
               htmlType="submit"
               icon={<SaveOutlined />}
               loading={submitting}
-              style={{ width: "100%", height: "40px", marginTop: 20 }}
+              style={{ width: "100%", height: "40px", marginTop: "20px" }}
               size="large"
             >
               Cập nhật sản phẩm
@@ -484,6 +570,7 @@ const EditProduct = () => {
         </Form>
       </Card>
 
+      {/* LocationFormModal */}
       {isLocationModalVisible && (
         <LocationFormModal
           visible={isLocationModalVisible}
