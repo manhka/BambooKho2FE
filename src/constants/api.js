@@ -5,7 +5,9 @@ export const API_ENDPOINTS = {
     LOGIN: "/auth/login",
     REGISTER: "/auth/register",
   },
-
+  USERS: {
+    GET_ALL: "/auth/users", // Lấy danh sách user
+  },
   CATEGORIES: {
     LIST: "/categories",
     DETAIL: (id) => `/categories/${id}`,

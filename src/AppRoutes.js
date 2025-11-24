@@ -18,6 +18,7 @@ import ImportGoods from "./pages/inventory/ImportGoods";
 import VoucherDetailView from "./pages/inventory/VoucherDetailView";
 import VoucherHistory from "./pages/inventory/VoucherHistory";
 import InventoryDashboard from "./pages/dashboard/InventoryDashboard";
+import UserList from "./pages/auth/UserList";
 
 const AppRoutes = () => (
   <Routes>
@@ -142,8 +143,16 @@ const AppRoutes = () => (
       <Route
         path="/dashboard"
         element={
-          <ProtectedRoute requiredRole={["admin", "staff"]}>
+          <ProtectedRoute requiredRole={["admin"]}>
             <InventoryDashboard />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/staffs"
+        element={
+          <ProtectedRoute requiredRole={["admin"]}>
+            <UserList />
           </ProtectedRoute>
         }
       />

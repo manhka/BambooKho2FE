@@ -64,9 +64,9 @@ const LoginPage = () => {
       const role = user?.role;
 
       if (role === "admin") {
-        navigate("/admin/dashboard");
+        navigate("/dashboard");
       } else {
-        navigate("/staff/dashboard");
+        navigate("/products/list");
       }
     } catch (err) {
       setError(

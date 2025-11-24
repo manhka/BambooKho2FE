@@ -1,6 +1,4 @@
-// components/InventoryDashboard.js
-
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Card,
   Row,
@@ -17,14 +15,13 @@ import {
 import {
   AreaChartOutlined,
   LineChartOutlined,
-  BarChartOutlined,
+  BarChartOutlined, // Sẽ dùng cho cả 2 biểu đồ
   DollarOutlined,
   ArrowUpOutlined,
   SearchOutlined,
 } from "@ant-design/icons";
 import moment from "moment";
 import { getInventorySummary } from "../../services/dashboardService";
-// Import thư viện biểu đồ
 import { Line, Bar } from "react-chartjs-2";
 import {
   Chart as ChartJS,
@@ -37,7 +34,6 @@ import {
   Legend,
 } from "chart.js";
 
-// Đăng ký các thành phần cần thiết cho Chart.js
 ChartJS.register(
   CategoryScale,
   LinearScale,
@@ -48,10 +44,8 @@ ChartJS.register(
   Legend
 );
 
-const { RangePicker } = DatePicker;
 const { Title, Text } = Typography;
 
-// --- Dữ liệu Dashboard mặc định ---
 const defaultSummary = {
   kpi: { totalStock: 0, totalStockValue: 0 },
   monthlyTrend: [],
@@ -61,29 +55,60 @@ const defaultSummary = {
 
 const InventoryDashboard = () => {
   const defaultStart = moment().subtract(5, "months").startOf("month");
-  const defaultEnd = moment();
+  const defaultEnd = moment().add(1, "day");
 
   const [summary, setSummary] = useState(defaultSummary);
   const [isLoading, setIsLoading] = useState(false);
-  const [dateRange, setDateRange] = useState([defaultStart, defaultEnd]);
+  const [startDate, setStartDate] = useState(defaultStart);
+  const [endDate, setEndDate] = useState(defaultEnd);
   const [dataType, setDataType] = useState("value");
-  const [filterTrigger, setFilterTrigger] = useState(0);
 
-  // --- Hàm gọi API thực tế ---
   const fetchDashboardData = async (start, end, type) => {
     setIsLoading(true);
     try {
-      const res = await getInventorySummary({
-        startDate: start,
-        endDate: end,
-        dataType: type,
-      });
-      setSummary(res); // Giả định service trả về object đã chứa data
-      message.success("Đã tải dữ liệu dashboard thành công!");
+      const payload = { startDate: start, endDate: end, dataType: type };
+
+      const res = await getInventorySummary(payload); // normalize data
+      const normalize = (data) => {
+        if (!data) return defaultSummary;
+
+        const kpi = {
+          totalStock: Number(data.kpi?.totalStock || 0),
+          totalStockValue: Number(data.kpi?.totalStockValue || 0),
+        };
+
+        const monthlyTrend =
+          Array.isArray(data.monthlyTrend) && data.monthlyTrend.length
+            ? data.monthlyTrend.map((m) => ({
+                month: m.month,
+                inValue: Number(m.inValue || 0),
+                outValue: Number(m.outValue || 0),
+              }))
+            : [];
+
+        const topExport =
+          Array.isArray(data.topExport) && data.topExport.length
+            ? data.topExport.map((t) => ({
+                name: t.name,
+                quantity: Number(t.quantity || 0),
+                salePrice: Number(t.salePrice || 0),
+              }))
+            : [];
+
+        return {
+          kpi,
+          monthlyTrend,
+          topExport,
+          dataType: data.dataType || type || "value",
+        };
+      };
+
+      const normalized = normalize(res);
+      setSummary(normalized); // message.success("Đã tải dữ liệu dashboard thành công!");
     } catch (error) {
       console.error("Fetch Dashboard Error:", error);
       message.error(
-        error.message ||
+        error?.message ||
           "Lỗi khi tải dữ liệu dashboard. Vui lòng kiểm tra API Backend."
       );
       setSummary(defaultSummary);
@@ -92,67 +117,66 @@ const InventoryDashboard = () => {
     }
   };
 
-  // --- 1. Tải Dữ liệu (Chỉ chạy khi mount và khi filter được áp dụng) ---
   useEffect(() => {
+    // Chỉ chạy 1 lần khi mount để tải dữ liệu mặc định
     fetchDashboardData(
-      dateRange[0].format("YYYY-MM-DD"),
-      dateRange[1].format("YYYY-MM-DD"),
+      startDate.format("YYYY-MM-DD"),
+      endDate.format("YYYY-MM-DD"),
       dataType
     );
-  }, [filterTrigger]);
+  }, []); // <-- Giữ nguyên [] để chỉ chạy 1 lần khi mount
 
-  // --- 2. Xử lý Áp dụng Bộ lọc ---
   const handleApplyFilter = () => {
-    if (!dateRange || !dateRange[0] || !dateRange[1]) {
-      return message.warning("Vui lòng chọn phạm vi thời gian.");
+    if (!startDate || !endDate) {
+      return message.warning(
+        "Vui lòng chọn đầy đủ ngày bắt đầu và ngày kết thúc."
+      );
     }
-    setFilterTrigger((prev) => prev + 1);
+    if (startDate.isAfter(endDate)) {
+      return message.warning("Ngày bắt đầu không được sau ngày kết thúc.");
+    } // Gọi API khi người dùng bấm Áp dụng
+    fetchDashboardData(
+      startDate.format("YYYY-MM-DD"),
+      endDate.format("YYYY-MM-DD"),
+      dataType
+    );
   };
 
-  // --- Hàm định dạng giá trị (VND hoặc Số lượng) ---
-  const formatValue = (value) => {
+  const formatValueForDisplay = (value) => {
+    const v = Number(value || 0);
     if (summary.dataType === "value") {
-      if (value > 1000000) {
-        // Hiển thị Triệu (Tr) cho UX tốt hơn
-        return `${(value / 1000000).toLocaleString("vi-VN", {
-          maximumFractionDigits: 2,
-        })} Triệu VND`;
-      }
-      return `${value.toLocaleString("vi-VN")} VND`;
+      return v >= 1000000
+        ? `${(v / 1000000).toLocaleString("vi-VN", {
+            maximumFractionDigits: 2,
+          })} Triệu VND`
+        : `${v.toLocaleString("vi-VN")} VND`;
     }
-    return `${value.toLocaleString("vi-VN")} Đơn vị`;
-  };
+    return `${v.toLocaleString("vi-VN")} Đơn vị`;
+  }; // --- Charts ---
 
-  // --- Cấu hình Biểu đồ Đường (Xu hướng Nhập/Xuất) ---
+  const trendLabels = summary.monthlyTrend.map((item) =>
+    item.month ? moment(item.month).format("MM/YYYY") : ""
+  ); // Dữ liệu cho biểu đồ CỘT Nhập/Xuất
+
   const trendChartData = {
-    labels: summary.monthlyTrend.map((item) =>
-      moment(item.monthYear, "YYYY-MM").format("MM/YYYY")
-    ),
+    labels: trendLabels,
     datasets: [
       {
-        label: `Giá trị Nhập (IN) (${
-          summary.dataType === "value" ? "VND" : "SL"
-        })`,
-        data: summary.monthlyTrend.map((item) => item.inValue),
+        label: `Nhập (IN) ${summary.dataType === "value" ? "(VND)" : "(SL)"}`,
+        data: summary.monthlyTrend.map((m) => m.inValue),
+        backgroundColor: "rgba(53, 162, 235, 0.8)", // Màu cột Nhập
         borderColor: "rgb(53, 162, 235)",
-        backgroundColor: "rgba(53, 162, 235, 0.5)",
-        yAxisID: "y",
-        tension: 0.4,
-        fill: false,
+        borderWidth: 1,
       },
       {
-        label: `Giá trị Xuất (OUT) (${
-          summary.dataType === "value" ? "VND" : "SL"
-        })`,
-        data: summary.monthlyTrend.map((item) => item.outValue),
+        label: `Xuất (OUT) ${summary.dataType === "value" ? "(VND)" : "(SL)"}`,
+        data: summary.monthlyTrend.map((m) => m.outValue),
+        backgroundColor: "rgba(255, 99, 132, 0.8)", // Màu cột Xuất
         borderColor: "rgb(255, 99, 132)",
-        backgroundColor: "rgba(255, 99, 132, 0.5)",
-        yAxisID: "y",
-        tension: 0.4,
-        fill: false,
+        borderWidth: 1,
       },
     ],
-  };
+  }; // Tùy chọn cho biểu đồ CỘT Nhập/Xuất (Grouped Bar Chart)
 
   const trendChartOptions = {
     responsive: true,
@@ -162,43 +186,40 @@ const InventoryDashboard = () => {
       tooltip: {
         callbacks: {
           label: (context) => {
-            let label = context.dataset.label || "";
-            if (label) {
-              label += ": ";
-            }
-            if (context.parsed.y !== null) {
-              label += formatValue(context.parsed.y);
-            }
-            return label;
+            const y = context.parsed.y;
+            return `${context.dataset.label}: ${formatValueForDisplay(y)}`;
           },
         },
       },
     },
+    // Thêm logic scales cho Bar Chart
     scales: {
+      x: {
+        stacked: false, // Không xếp chồng cột
+      },
       y: {
         beginAtZero: true,
+        stacked: false, // Không xếp chồng cột
         title: {
           display: true,
           text: summary.dataType === "value" ? "Giá trị (VND)" : "Số lượng",
         },
         ticks: {
-          callback: (value) => {
-            return summary.dataType === "value"
-              ? (value / 1000000).toLocaleString() + " Tr" // Định dạng trục Y thành Triệu
-              : value.toLocaleString();
-          },
+          callback: (val) =>
+            summary.dataType === "value"
+              ? `${(val / 1000000).toLocaleString()} Tr`
+              : val.toLocaleString(),
         },
       },
     },
   };
 
-  // --- Cấu hình Biểu đồ Cột (Top Xuất Kho) ---
   const topExportChartData = {
-    labels: summary.topExport.map((item) => item.name),
+    labels: summary.topExport.map((t) => t.name),
     datasets: [
       {
-        label: "Số lượng Xuất (Đơn vị)",
-        data: summary.topExport.map((item) => item.quantity),
+        label: "Số lượng",
+        data: summary.topExport.map((t) => t.quantity),
         backgroundColor: "rgba(75, 192, 192, 0.8)",
         borderColor: "rgba(75, 192, 192, 1)",
         borderWidth: 1,
@@ -209,84 +230,99 @@ const InventoryDashboard = () => {
   const topExportChartOptions = {
     responsive: true,
     maintainAspectRatio: false,
-    indexAxis: "y", // Biểu đồ cột ngang
-    plugins: {
-      legend: { display: false },
-    },
+    indexAxis: "y",
+    plugins: { legend: { display: false } },
     scales: {
-      x: {
-        beginAtZero: true,
-        title: { display: true, text: "Số lượng bán ra" },
-      },
+      x: { beginAtZero: true, title: { display: true, text: "Số lượng" } },
     },
   };
+
+  const totalInValue = summary.monthlyTrend.reduce(
+    (s, m) => s + Number(m.inValue || 0),
+    0
+  );
 
   return (
     <div
       style={{ padding: 24, backgroundColor: "#f0f2f5", minHeight: "100vh" }}
     >
+      {" "}
       <Title level={2} style={{ marginBottom: 20 }}>
-        📊 Dashboard Quản lý Tồn kho
+        📊 Dashboard Quản lý Tồn kho{" "}
       </Title>
-
-      {/* --- Thanh Bộ lọc Dữ liệu --- */}
+      {/* Filter */}{" "}
       <Card style={{ marginBottom: 20 }}>
+        {" "}
         <Space size="middle" wrap>
-          <Text strong>Chọn Phạm vi:</Text>
-          <RangePicker
-            defaultValue={[defaultStart, defaultEnd]}
+          <Text strong>Ngày bắt đầu:</Text>{" "}
+          <DatePicker
+            value={startDate}
             format="DD/MM/YYYY"
-            onChange={setDateRange}
-            style={{ width: 250 }}
-            disabled={isLoading}
-          />
-          <Text strong>Hiển thị theo:</Text>
-          <Select
-            defaultValue="value"
-            value={dataType}
+            onChange={(val) => setStartDate(val || defaultStart)}
             style={{ width: 150 }}
+            disabled={isLoading}
+            disabledDate={(current) => current && current.isAfter(endDate)}
+          />
+          <Text strong>Ngày kết thúc:</Text>{" "}
+          <DatePicker
+            value={endDate}
+            format="DD/MM/YYYY"
+            onChange={(val) => setEndDate(val || defaultEnd)}
+            style={{ width: 150 }}
+            disabled={isLoading}
+            disabledDate={(current) => current && current.isBefore(startDate)}
+          />
+          <Text strong>Hiển thị theo:</Text>{" "}
+          <Select
+            value={dataType}
+            style={{ width: 180 }}
             onChange={setDataType}
             disabled={isLoading}
           >
+            {" "}
             <Select.Option value="value">
-              <DollarOutlined /> Giá trị (VND)
-            </Select.Option>
+              <DollarOutlined /> Giá trị (VND){" "}
+            </Select.Option>{" "}
             <Select.Option value="quantity">
-              <AreaChartOutlined /> Số lượng
-            </Select.Option>
-          </Select>
+              <AreaChartOutlined /> Số lượng{" "}
+            </Select.Option>{" "}
+          </Select>{" "}
           <Button
             type="primary"
             onClick={handleApplyFilter}
             loading={isLoading}
             icon={<SearchOutlined />}
           >
-            Áp dụng
-          </Button>
-        </Space>
-      </Card>
-
+            Áp dụng{" "}
+          </Button>{" "}
+        </Space>{" "}
+      </Card>{" "}
       <Spin spinning={isLoading} tip="Đang tải dữ liệu...">
-        {/* --- 1. Khu vực KPI Tổng quan --- */}
+        {/* KPI */}{" "}
         <Row gutter={[16, 16]} style={{ marginBottom: 20 }}>
+          {" "}
           <Col xs={24} sm={12} lg={8}>
+            {" "}
             <Card bordered hoverable>
+              {" "}
               <Statistic
                 title="Tổng Giá trị Tồn kho (WAC)"
                 value={summary.kpi.totalStockValue}
-                formatter={(value) =>
-                  `${(value / 1000000).toLocaleString("vi-VN", {
+                formatter={(v) =>
+                  `${(Number(v) / 1000000).toLocaleString("vi-VN", {
                     maximumFractionDigits: 0,
                   })} Triệu`
                 }
                 valueStyle={{ color: "#3f8600", fontSize: 28 }}
                 prefix={<DollarOutlined />}
                 suffix="VND"
-              />
-            </Card>
-          </Col>
+              />{" "}
+            </Card>{" "}
+          </Col>{" "}
           <Col xs={24} sm={12} lg={8}>
+            {" "}
             <Card bordered hoverable>
+              {" "}
               <Statistic
                 title="Tổng Số lượng Tồn kho"
                 value={summary.kpi.totalStock}
@@ -294,103 +330,110 @@ const InventoryDashboard = () => {
                 valueStyle={{ color: "#0057b7", fontSize: 28 }}
                 prefix={<AreaChartOutlined />}
                 suffix="sản phẩm"
-              />
-            </Card>
-          </Col>
+              />{" "}
+            </Card>{" "}
+          </Col>{" "}
           <Col xs={24} sm={24} lg={8}>
+            {" "}
             <Card bordered hoverable>
-              {/* Đã FIX: Sử dụng hàm formatValue để hiển thị VND/Triệu chính xác */}
+              {" "}
               <Statistic
-                title={`Tổng Giá trị Nhập (Trong kỳ)`}
-                value={summary.monthlyTrend.reduce(
-                  (sum, item) => sum + item.inValue,
-                  0
-                )}
-                formatter={formatValue}
+                title="Tổng Giá trị Nhập (Trong kỳ)"
+                value={totalInValue}
+                formatter={() => formatValueForDisplay(totalInValue)}
                 valueStyle={{ color: "#cf1322", fontSize: 28 }}
                 prefix={<ArrowUpOutlined />}
-              />
-            </Card>
-          </Col>
+              />{" "}
+            </Card>{" "}
+          </Col>{" "}
         </Row>
-
-        {/* --- 2. Biểu đồ Xu hướng Nhập/Xuất --- */}
-        <Row gutter={[16, 16]} style={{ marginBottom: 20 }}>
-          <Col span={24}>
+        {/* --- Charts Section (Tách thành 2 cột) --- */}{" "}
+        <Row gutter={[16, 16]}>
+          {" "}
+          <Col xs={24} lg={16} style={{ marginBottom: 20 }}>
+            {" "}
+            {/* Cột 1: Biểu đồ Xu hướng Nhập/Xuất (Line Chart -> BAR CHART) */}{" "}
             <Card
               title={
                 <Title level={4}>
-                  <LineChartOutlined /> Xu hướng Nhập/Xuất theo tháng
+                  <BarChartOutlined /> Xu hướng Nhập/Xuất theo tháng{" "}
                 </Title>
               }
               bordered
+              style={{ height: "100%" }}
               extra={
                 <Text type="secondary">
                   Đơn vị:{" "}
-                  {summary.dataType === "value" ? "Giá trị" : "Số lượng"}
+                  {summary.dataType === "value" ? "Giá trị" : "Số lượng"}{" "}
                 </Text>
               }
             >
+              {" "}
               <div style={{ height: 350 }}>
-                {summary.monthlyTrend.length > 0 ? (
-                  <Line options={trendChartOptions} data={trendChartData} />
-                ) : (
+                {/* Đã chuyển sang sử dụng Bar Chart */}{" "}
+                <Bar options={trendChartOptions} data={trendChartData} />{" "}
+                {summary.monthlyTrend.length === 0 && !isLoading && (
                   <Text
                     type="secondary"
                     style={{
                       display: "block",
                       textAlign: "center",
-                      paddingTop: 100,
+                      position: "absolute",
+                      top: "50%",
+                      width: "100%",
+                      transform: "translateY(-50%)",
                     }}
                   >
-                    Không có dữ liệu giao dịch trong kỳ.
+                    Không có dữ liệu giao dịch trong kỳ được chọn.{" "}
                   </Text>
-                )}
-              </div>
-            </Card>
-          </Col>
-        </Row>
-
-        {/* --- 3. Biểu đồ Top Xuất Kho --- */}
-        <Row gutter={[16, 16]}>
-          <Col span={24}>
+                )}{" "}
+              </div>{" "}
+            </Card>{" "}
+          </Col>{" "}
+          <Col xs={24} lg={8} style={{ marginBottom: 20 }}>
+            {/* Cột 2: Biểu đồ Top Xuất Kho (Bar Chart) */}{" "}
             <Card
               title={
                 <Title level={4}>
                   <BarChartOutlined /> Top {summary.topExport.length} Sản phẩm
-                  Xuất Kho nhiều nhất
+                  Xuất Kho{" "}
                 </Title>
               }
               bordered
-              extra={<Text type="secondary">Đơn vị: Số lượng bán ra</Text>}
+              style={{ height: "100%" }}
+              extra={<Text type="secondary">Đơn vị: Số lượng</Text>}
             >
+              {" "}
               <div
                 style={{
-                  height: Math.max(200, summary.topExport.length * 50 + 50),
+                  height: Math.max(200, summary.topExport.length * 40 + 50),
                 }}
               >
-                {summary.topExport.length > 0 ? (
-                  <Bar
-                    options={topExportChartOptions}
-                    data={topExportChartData}
-                  />
-                ) : (
+                {" "}
+                <Bar
+                  options={topExportChartOptions}
+                  data={topExportChartData}
+                />{" "}
+                {summary.topExport.length === 0 && !isLoading && (
                   <Text
                     type="secondary"
                     style={{
                       display: "block",
                       textAlign: "center",
-                      paddingTop: 50,
+                      position: "absolute",
+                      top: "50%",
+                      width: "100%",
+                      transform: "translateY(-50%)",
                     }}
                   >
-                    Không có dữ liệu xuất kho trong kỳ.
+                    Không có dữ liệu xuất kho trong kỳ.{" "}
                   </Text>
-                )}
-              </div>
-            </Card>
-          </Col>
-        </Row>
-      </Spin>
+                )}{" "}
+              </div>{" "}
+            </Card>{" "}
+          </Col>{" "}
+        </Row>{" "}
+      </Spin>{" "}
     </div>
   );
 };

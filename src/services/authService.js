@@ -38,3 +38,18 @@ export const register = async (
     throw error;
   }
 };
+export const getUsers = async (page = 1, limit = 10, search = "") => {
+  try {
+    const res = await api.get(API_ENDPOINTS.USERS.GET_ALL, {
+      params: {
+        page,
+        limit,
+        search,
+      },
+    });
+    return res.data;
+  } catch (error) {
+    console.error("Fetch users error:", error.response?.data || error.message);
+    throw error.response?.data || { message: error.message };
+  }
+};

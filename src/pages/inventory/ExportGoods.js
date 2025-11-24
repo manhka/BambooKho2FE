@@ -38,7 +38,10 @@ const { Option } = Select;
 const { Text } = Typography;
 
 const ExportGoods = () => {
+  // Khai báo Form instance cho Form chính và Form Tạo Khách hàng
   const [form] = Form.useForm();
+  const [customerForm] = Form.useForm(); // <--- FORM CHO MODAL TẠO KHÁCH HÀNG
+
   const [isLoading, setIsLoading] = useState(false);
   const [isFetchingData, setIsFetchingData] = useState(false);
 
@@ -160,13 +163,21 @@ const ExportGoods = () => {
     });
   };
 
-  // --- 5. Hàm Tạo Khách hàng ---
+  // --- 5. Hàm Tạo Khách hàng (ĐÃ SỬA) ---
   const handleCreateCustomer = async (values) => {
     setIsLoading(true);
     try {
+      // Đảm bảo tên trường khớp với Sequelize Model: FullName, Phone, Email, Address
       const newCustomer = await createCustomer(values);
+
+      // Thêm khách hàng mới vào state
       setCustomers((prev) => [...prev, newCustomer]);
+
+      // Set CustomerID cho Select trong form xuất kho chính
       form.setFieldsValue({ customerId: newCustomer.CustomerID });
+
+      // Reset form tạo khách hàng và đóng Modal
+      customerForm.resetFields();
       message.success(`Đã tạo Khách hàng ${newCustomer.FullName} thành công.`);
       setIsCustomerModalVisible(false);
     } catch (error) {
@@ -579,27 +590,49 @@ const ExportGoods = () => {
           </Form.Item>
         </Form>
 
-        {/* Modal: Tạo Khách hàng */}
+        {/* Modal: Tạo Khách hàng (ĐÃ SỬA) */}
         <Modal
           title="Tạo Khách hàng mới"
           open={isCustomerModalVisible}
-          onCancel={() => setIsCustomerModalVisible(false)}
+          onCancel={() => {
+            setIsCustomerModalVisible(false);
+            customerForm.resetFields(); // Reset form khi đóng modal
+          }}
           footer={null}
         >
-          <Form layout="vertical" onFinish={handleCreateCustomer}>
+          <Form
+            layout="vertical"
+            onFinish={handleCreateCustomer}
+            form={customerForm} // <--- GẮN customerForm
+          >
             <Form.Item
-              name="fullName"
+              name="FullName" // Tên cột Sequelize
               label="Tên Khách hàng"
-              rules={[{ required: true, message: "Nhập tên khách hàng" }]}
+              rules={[
+                { required: true, message: "Vui lòng nhập tên khách hàng" },
+              ]}
             >
               <Input />
             </Form.Item>
             <Form.Item
-              name="phone"
+              name="Phone" // Tên cột Sequelize
               label="Số điện thoại"
-              rules={[{ required: true, message: "Nhập SĐT" }]}
+              rules={[{ required: true, message: "Vui lòng nhập SĐT" }]}
             >
               <Input />
+            </Form.Item>
+            <Form.Item
+              name="Email" // Tên cột Sequelize
+              label="Email (Không bắt buộc)"
+              rules={[{ type: "email", message: "Email không hợp lệ" }]}
+            >
+              <Input />
+            </Form.Item>
+            <Form.Item
+              name="Address" // Tên cột Sequelize
+              label="Địa chỉ (Không bắt buộc)"
+            >
+              <Input.TextArea rows={2} />
             </Form.Item>
             <Form.Item>
               <Button

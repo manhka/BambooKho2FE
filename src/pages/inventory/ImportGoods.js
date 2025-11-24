@@ -40,12 +40,10 @@ import {
 const { Option } = Select;
 const { Text } = Typography;
 
-// Giả định bạn có các trường dữ liệu sau từ Backend:
-// Product: { Barcode, Name, IsSerial, SalePrice, CostPrice, AverageCost, DefaultWarranty, StockQuantity, MinStockLevel, MaxStockLevel, Description, ImageUrl, Category: {Name}, Brand: {Name}, Location: {Name} }
-// Supplier: { SupplierID, Name, Phone }
-
 const ImportGoods = () => {
   const [form] = Form.useForm();
+  const [supplierForm] = Form.useForm(); // <--- KHAI BÁO FORM CHO MODAL TẠO NCC
+
   const [isLoading, setIsLoading] = useState(false);
   const [isFetchingData, setIsFetchingData] = useState(false);
 
@@ -64,10 +62,12 @@ const ImportGoods = () => {
   const [previewData, setPreviewData] = useState(null);
   const [isSuccessModalVisible, setIsSuccessModalVisible] = useState(false);
   const [lastVoucher, setLastVoucher] = useState(null);
+
   const getSupplierName = (id) => {
     const supplier = suppliers.find((s) => s.SupplierID === id);
     return supplier ? supplier.Name : `ID: ${id} (Không tìm thấy)`;
   };
+
   // --- 1. Fetch Dữ liệu Ban đầu (Suppliers và Product List) ---
   useEffect(() => {
     const loadInitialData = async () => {
@@ -168,13 +168,19 @@ const ImportGoods = () => {
     }
   };
 
-  // --- 5. Hàm Tạo Nhà cung cấp ---
+  // --- 5. Hàm Tạo Nhà cung cấp (ĐÃ SỬA) ---
   const handleCreateSupplier = async (values) => {
     setIsLoading(true);
     try {
+      // Đảm bảo tên trường khớp với Sequelize Model: Name, Phone, Email, Address
       const newSupplier = await createSupplier(values);
+
       setSuppliers((prev) => [...prev, newSupplier]);
+      // Cập nhật giá trị vào Select của form nhập kho
       form.setFieldsValue({ supplierId: newSupplier.SupplierID });
+
+      // Reset form NCC và đóng Modal
+      supplierForm.resetFields();
       message.success(`Đã tạo Nhà cung cấp ${newSupplier.Name} thành công.`);
       setIsSupplierModalVisible(false);
     } catch (error) {
@@ -213,6 +219,7 @@ const ImportGoods = () => {
         serialNumbers: isSerialProduct ? serialNumbers : null,
         batchDetails: !isSerialProduct
           ? {
+              // batchId = null sẽ tạo lô mới
               batchId: item.batchId,
               warrantyMonths: item.warrantyMonths,
             }
@@ -240,8 +247,9 @@ const ImportGoods = () => {
         (sum, item) => sum + item.quantity * item.unitPrice,
         0
       );
-      console.log("voucherID:", result.voucherId);
+
       setLastVoucher({
+        voucherCode: result.voucherCode, // Giả định service trả về voucherCode
         voucherId: result.voucherId,
         totalQuantity: totalQuantity,
         totalAmount: totalAmount,
@@ -262,7 +270,6 @@ const ImportGoods = () => {
     try {
       const values = await form.validateFields();
       const data = prepareDataForImport(values);
-      console.log("PreviewDatas:", data);
       setPreviewData(data);
       setIsPreviewModalVisible(true);
     } catch (errorInfo) {
@@ -438,6 +445,13 @@ const ImportGoods = () => {
         const product = selectedProductData[barcode];
         const isSerial = product?.IsSerial;
 
+        // Hiển thị SL
+        const quantityValue = formInstance.getFieldValue([
+          "details",
+          index,
+          "quantity",
+        ]);
+
         return (
           <Form.Item
             name={[index, "quantity"]}
@@ -448,6 +462,8 @@ const ImportGoods = () => {
               min={1}
               style={{ width: "100%" }}
               disabled={isSerial || isLoading}
+              // Nếu là serial, giá trị được tính từ serialInput, chỉ hiển thị
+              value={isSerial ? quantityValue : undefined}
             />
           </Form.Item>
         );
@@ -614,23 +630,46 @@ const ImportGoods = () => {
           </Form.Item>
         </Form>
 
-        {/* Modal: Tạo Nhà cung cấp (Giữ nguyên) */}
+        {/* Modal: Tạo Nhà cung cấp (ĐÃ SỬA) */}
         <Modal
           title="Tạo Nhà cung cấp mới"
           open={isSupplierModalVisible}
-          onCancel={() => setIsSupplierModalVisible(false)}
+          onCancel={() => {
+            setIsSupplierModalVisible(false);
+            supplierForm.resetFields(); // Reset form khi hủy
+          }}
           footer={null}
         >
-          <Form layout="vertical" onFinish={handleCreateSupplier}>
+          <Form
+            layout="vertical"
+            onFinish={handleCreateSupplier}
+            form={supplierForm} // <--- GẮN supplierForm
+          >
+            {/* Tên NCC: BẮT BUỘC theo Sequelize Model */}
             <Form.Item
-              name="name"
+              name="Name"
               label="Tên Nhà cung cấp"
-              rules={[{ required: true, message: "Nhập tên nhà cung cấp" }]}
+              rules={[
+                { required: true, message: "Vui lòng nhập tên nhà cung cấp" },
+              ]}
             >
               <Input />
             </Form.Item>
-            <Form.Item name="phone" label="Số điện thoại">
+            {/* Số điện thoại: KHÔNG BẮT BUỘC theo Sequelize Model */}
+            <Form.Item name="Phone" label="Số điện thoại">
               <Input />
+            </Form.Item>
+            {/* Email: KHÔNG BẮT BUỘC theo Sequelize Model */}
+            <Form.Item
+              name="Email"
+              label="Email"
+              rules={[{ type: "email", message: "Email không hợp lệ" }]}
+            >
+              <Input />
+            </Form.Item>
+            {/* Địa chỉ: KHÔNG BẮT BUỘC theo Sequelize Model */}
+            <Form.Item name="Address" label="Địa chỉ">
+              <Input.TextArea rows={2} />
             </Form.Item>
             <Form.Item>
               <Button
@@ -753,10 +792,8 @@ const ImportGoods = () => {
                 {
                   title: "Lô/Serial",
                   dataIndex: "serialNumbers",
-                  // --- SỬA ĐỔI LOGIC HIỂN THỊ SERIAL CỤ THỂ ---
                   render: (serialNumbers, record) => {
                     if (serialNumbers && serialNumbers.length > 0) {
-                      // Nếu là Serial, hiển thị danh sách trong Tooltip hoặc Box nhỏ
                       return (
                         <Text strong>
                           {serialNumbers.length} mã Serial
@@ -776,12 +813,10 @@ const ImportGoods = () => {
                         </Text>
                       );
                     }
-                    // Nếu là Lô
                     return `Batch ID: ${
                       record.batchDetails?.batchId || "[Mới]"
                     }`;
                   },
-                  // ---------------------------------------------
                 },
                 { title: "BH (tháng)", dataIndex: "warrantyMonths" },
               ]}
@@ -823,13 +858,12 @@ const ImportGoods = () => {
           <Button
             key="view"
             type="default"
-            // Chuyển đổi Button thành Link
+            // Sử dụng Link bên trong Button để giữ nguyên Ant Design look
             style={{ padding: 0, border: "none" }}
-            disabled={!lastVoucher?.voucherId} // Kiểm tra voucherCode
+            disabled={!lastVoucher?.voucherId}
           >
             <Link
-              to={`/inventory/vouchers/${lastVoucher?.voucherId}`} // <-- CHUYỂN HƯỚNG BẰNG CODE
-              // Cần thêm class hoặc style cho Link để trông giống Button
+              to={`/inventory/vouchers/${lastVoucher?.voucherId}`}
               style={{
                 display: "block",
                 padding: "0 15px",

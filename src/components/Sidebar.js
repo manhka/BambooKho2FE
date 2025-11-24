@@ -1,5 +1,17 @@
 import React, { useState } from "react";
-import { LogOut, ChevronDown, Layers, Tag } from "lucide-react";
+import {
+  LogOut,
+  ChevronDown,
+  Layers,
+  Tag,
+  Users,
+  Box,
+  ShoppingCart,
+  MapPin,
+  User,
+  Truck,
+  ClipboardList,
+} from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { jwtDecode } from "jwt-decode";
 
@@ -32,29 +44,36 @@ export default function Sidebar({ isOpen, onLogout }) {
     {
       id: "dashboard",
       label: "Bảng điều khiển",
-      icon: Layers,
+      icon: Layers, // tổng quan / dashboard
       roles: ["admin"],
       path: "/dashboard",
     },
     {
+      id: "staffs",
+      label: "Quản lý nhân viên",
+      icon: Users, // biểu tượng nhân viên
+      roles: ["admin"],
+      path: "/staffs",
+    },
+    {
       id: "categories",
       label: "Quản lý danh mục",
-      icon: Layers,
-      roles: ["admin"],
+      icon: Tag, // danh mục / nhãn
+      roles: ["admin", "staff"],
       path: "/categories/list",
     },
     {
       id: "brands",
       label: "Quản lý thương hiệu",
-      icon: Tag,
-      roles: ["admin"],
+      icon: Tag, // thương hiệu cũng có thể dùng Tag
+      roles: ["admin", "staff"],
       path: "/brands/list",
     },
     {
       id: "products",
       label: "Sản phẩm",
-      icon: Tag,
-      roles: ["admin"],
+      icon: Box, // sản phẩm / hộp
+      roles: ["admin", "staff"],
       submenu: [
         { label: "Danh sách sản phẩm", path: "/products/list" },
         { label: "Thêm sản phẩm", path: "/products/create" },
@@ -62,30 +81,30 @@ export default function Sidebar({ isOpen, onLogout }) {
     },
     {
       id: "locations",
-      label: "Quản lý vi trí kho",
-      icon: Tag,
-      roles: ["admin"],
+      label: "Quản lý vị trí kho",
+      icon: MapPin, // vị trí
+      roles: ["admin", "staff"],
       path: "/locations/list",
     },
     {
       id: "customers",
       label: "Quản lý khách hàng",
-      icon: Tag,
-      roles: ["admin"],
+      icon: User, // khách hàng
+      roles: ["admin", "staff"],
       path: "/customers/list",
     },
     {
       id: "suppliers",
-      label: "Quản lý nhà cung cấp",
-      icon: Tag,
-      roles: ["admin"],
+      label: "Quản lý nhà cung cấp",
+      icon: Truck, // nhà cung cấp / vận chuyển
+      roles: ["admin", "staff"],
       path: "/suppliers/list",
     },
     {
       id: "inventory",
       label: "Quản lý kho",
-      icon: Tag,
-      roles: ["admin"],
+      icon: ShoppingCart, // kho / hàng hóa
+      roles: ["admin", "staff"],
       submenu: [
         { label: "Xuất hàng", path: "/inventory/export" },
         { label: "Nhập hàng", path: "/inventory/import" },
