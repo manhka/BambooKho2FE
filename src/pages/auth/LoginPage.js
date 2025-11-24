@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { login } from "../../services/authService";
 import { useNavigate } from "react-router-dom";
 import { Eye, EyeOff } from "lucide-react";
-
+import { jwtDecode } from "jwt-decode";
 const LoginPage = () => {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -46,8 +46,9 @@ const LoginPage = () => {
       const res = await login(username, password);
 
       localStorage.setItem("token", res.token);
-      localStorage.setItem("user", JSON.stringify(res.user));
-
+      // decode token
+      const userDataDecode = jwtDecode(res.token);
+      localStorage.setItem("user", JSON.stringify(userDataDecode));
       const userData = localStorage.getItem("user");
       let user;
       try {
